@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Totales por Día - SION S.R.L</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+    }
+    .total-dia {
+      border: 2px solid green;
+      border-radius: 8px;
+      padding: 12px;
+      margin: 10px 0;
+      background-color: #f7f7f7;
+    }
+    #login-container {
+      text-align: center;
+      margin-top: 50px;
+    }
+    input, button {
+      padding: 10px;
+      margin: 5px;
+    }
+    #logout {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 8px 16px;
+      background-color: rgb(252, 169, 169);
+      padding: 6px 6px;
+      font-size: 15px;
+      border-radius: 8px;
+    }  
+  #logout:hover {
+  background-color: #d62e2e;
+  transform: scale(1.05);
+ 
+    
+    }
+  
+    #loginBtn {
+  background-color: #4CAF50;
+  color: white;
+  padding: 12px 24px;
+  font-size: 16px;
+  border: none;
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+#loginBtn:hover {
+  background-color: #45a049;
+  transform: scale(1.05);
+}
+
+#loginBtn:active {
+  transform: scale(0.97);
+}
+
+#login-container {
+  background-color: rgb(247, 204, 247);
+  color: white;
+  padding: 6px 6px;
+  font-size: 1px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+ #email {border-radius: 8px;}
+ #password { border-radius: 8px;}
+
+
+
+#logout-container {
+  background-color: rgb(247, 204, 247);
+  color: white;
+  padding: 6px 6px;
+  font-size: 1px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+} 
+
+  </style>
+</head>
+<body>
+   
+  <button id="logout" style="display:none;">Cerrar sesión</button> 
+  <h1>Pedidos por Fecha </h1>
+
+  <div id="login-container" style="display:none;">
+    <input id="email" type="email" id="email" placeholder="Correo">
+    <input id="password" type="password" id="password" placeholder="Contraseña">
+    <button id="loginBtn" onclick="login()">Iniciar sesión</button>
+
+  </div>
+
+  <div id="resultados"></div>
+
+  <!-- Mismo HTML y estilos de antes... -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import {
+    getFirestore,
+    collection,
+    getDocs,
+    doc,
+    query,
+    orderBy
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  import {
+    getAuth,
+    signInWithEmailAndPassword,
+    onAuthStateChanged,
+    signOut
+  } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCr0SM_u0c4aEG_tT_CXWLcvd6alZJT44c",
+    authDomain: "siondata22.firebaseapp.com",
+    projectId: "siondata22",
+    storageBucket: "siondata22.appspot.com",
+    messagingSenderId: "946379205241",
+    appId: "1:946379205241:web:0fe04a6246518451ee42a8",
+    measurementId: "G-EX6YDJYS1N"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const auth = getAuth(app);
+
+  const loginContainer = document.getElementById("login-container");
+  const logoutBtn = document.getElementById("logout");
+  const resultados = document.getElementById("resultados");
+
+  const productosCache = new Map();
+
+  // Precargar productos una sola vez
+  async function precargarProductos() {
+    const snap = await getDocs(collection(db, "productos"));
+    snap.forEach(doc => {
+      productosCache.set(doc.id, doc.data());
+    });
+  }
+
+  onAuthStateChanged(auth, async user => {
+    if (user) {
+      loginContainer.style.display = "none";
+      logoutBtn.style.display = "inline";
+      await precargarProductos(); // Cargamos primero los precios
+      mostrarTotalesPorDia();
+    } else {
+      loginContainer.style.display = "block";
+      logoutBtn.style.display = "none";
+    }
+  });
+
+  window.login = async function () {
+    const email = document.getElementById("email").value;
+    const pass = document.getElementById("password").value;
+    try {
+      await signInWithEmailAndPassword(auth, email, pass);
+    } catch (e) {
+      alert("Error de inicio de sesión: " + e.message);
+    }
+  };
+
+  logoutBtn.addEventListener("click", () => {
+    signOut(auth);
+  });
+
+  async function mostrarTotalesPorDia() {
+    const q = query(collection(db, "pedidos"), orderBy("fecha", "desc"));
+    const pedidosSnapshot = await getDocs(q);
+    const totales = {};
+
+for (const docPedido of pedidosSnapshot.docs) {
+  const pedido = docPedido.data();
+  const productos = pedido.productos || [];
+  let totalPedido = 0;
+
+  for (const p of productos) {
+    const prodData = productosCache.get(p.productoId);
+    const precio = prodData ? prodData.precio || 0 : 0;
+    totalPedido += precio * p.cantidad;
+  }
+
+  const fecha = new Date(pedido.fecha);
+  const dia = fecha.toLocaleDateString("es-ES");
+  const sucursal = pedido.sucursal || "Desconocida";
+  const clave = `${dia} - ${sucursal}`;
+
+  totales[clave] = (totales[clave] || 0) + totalPedido;
+}
+
+for (const clave in totales) {
+  const div = document.createElement("div");
+  div.className = "total-dia";
+  div.innerHTML = `
+  <div style="display: flex; justify-content: space-between;">
+    <strong>${clave}</strong>
+    <span>Gs. ${totales[clave].toLocaleString()}</span>
+  </div>
+`;
+  resultados.appendChild(div);
+}
+
+  }
+</script>
+</body>
+</html>
